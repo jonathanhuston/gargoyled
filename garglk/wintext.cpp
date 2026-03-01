@@ -1390,7 +1390,7 @@ static void acceptline(window_t *win, glui32 keycode)
         dwin->history_it = dwin->history.begin();
     }
 
-    // Informed: LLM-powered natural language translation.
+    // Gargoyled: LLM-powered natural language translation.
     // Convert the player's natural language input into parser-friendly commands
     // before passing it to the game interpreter.
     if (garglk::llm::is_available() && len > 0) {

@@ -1,6 +1,6 @@
 // Copyright (C) 2026 by Jonathan Huston.
 //
-// This file is part of Informed (Gargoyle fork with LLM-powered natural language input).
+// This file is part of Gargoyled (Gargoyle fork with LLM-powered natural language input).
 //
 // Gargoyle is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -14,7 +14,7 @@
 #import <Cocoa/Cocoa.h>
 #import <Security/Security.h>
 
-static NSString *const kServiceName = @"com.informed.gargoyle";
+static NSString *const kServiceName = @"com.gargoyled.app";
 static NSString *const kAccountName = @"ANTHROPIC_API_KEY";
 
 // NSAlert intercepts key equivalents, so Cmd+V/C/X/A don't reach the
@@ -61,7 +61,7 @@ std::string get_api_key()
     }
 
     if (status != errSecItemNotFound) {
-        std::cerr << "[Informed] Keychain read error: " << status << std::endl;
+        std::cerr << "[Gargoyled] Keychain read error: " << status << std::endl;
     }
 
     return "";
@@ -97,11 +97,11 @@ bool set_api_key(const std::string &key)
     }
 
     if (status != errSecSuccess) {
-        std::cerr << "[Informed] Keychain write error: " << status << std::endl;
+        std::cerr << "[Gargoyled] Keychain write error: " << status << std::endl;
         return false;
     }
 
-    std::cerr << "[Informed] API key stored in macOS Keychain." << std::endl;
+    std::cerr << "[Gargoyled] API key stored in macOS Keychain." << std::endl;
     return true;
 }
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Informed** is a fork of [Gargoyle](https://github.com/garglk/garglk), an open-source interactive fiction (IF) player. The fork adds LLM-powered natural language input translation: players type natural English prose and it gets translated into standard IF parser commands via the Anthropic Claude API before delivery to the game interpreter.
+**Gargoyled** is a fork of [Gargoyle](https://github.com/garglk/garglk), an open-source interactive fiction (IF) player. The fork adds LLM-powered natural language input translation: players type natural English prose and it gets translated into standard IF parser commands via the Anthropic Claude API before delivery to the game interpreter.
 
 ## Build Commands
 
@@ -82,7 +82,7 @@ Two versions of libgarglk are built:
 | `imgload.cpp` / `imgscale.cpp` | Image loading and scaling (HQX, xBRZ) |
 | `sndsdl.cpp` / `sndqt.cpp` | Sound backends |
 
-### Informed LLM subsystem (`garglk/llm.h`, `garglk/llm.cpp`)
+### Gargoyled LLM subsystem (`garglk/llm.h`, `garglk/llm.cpp`)
 
 Integration point: `wintext.cpp` at the line-input completion handler. When the player presses Enter:
 1. `llm::is_available()` checks if `ANTHROPIC_API_KEY` env var is set
@@ -110,4 +110,4 @@ There are no unit tests. CI validates builds across platform/feature matrix comb
 
 ## LLM Configuration
 
-Set `ANTHROPIC_API_KEY` environment variable to enable natural language translation. Without it, Informed behaves identically to standard Gargoyle. Debug output goes to stderr with `[Informed]` prefix.
+Set `ANTHROPIC_API_KEY` environment variable to enable natural language translation. Without it, Gargoyled behaves identically to standard Gargoyle. Debug output goes to stderr with `[Gargoyled]` prefix.

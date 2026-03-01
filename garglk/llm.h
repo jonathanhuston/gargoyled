@@ -1,6 +1,6 @@
 // Copyright (C) 2026 by Jonathan Huston.
 //
-// This file is part of Informed (Gargoyle fork with LLM-powered natural language input).
+// This file is part of Gargoyled (Gargoyle fork with LLM-powered natural language input).
 //
 // Gargoyle is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by

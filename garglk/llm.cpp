@@ -1,6 +1,6 @@
 // Copyright (C) 2026 by Jonathan Huston.
 //
-// This file is part of Informed (Gargoyle fork with LLM-powered natural language input).
+// This file is part of Gargoyled (Gargoyle fork with LLM-powered natural language input).
 //
 // Gargoyle is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -214,7 +214,7 @@ static std::string call_anthropic_api(const std::string &user_message)
     // Execute via popen
     FILE *pipe = popen(command.c_str(), "r");
     if (pipe == nullptr) {
-        std::cerr << "[Informed] Failed to execute curl" << std::endl;
+        std::cerr << "[Gargoyled] Failed to execute curl" << std::endl;
         return "";
     }
 
@@ -226,7 +226,7 @@ static std::string call_anthropic_api(const std::string &user_message)
 
     int status = pclose(pipe);
     if (status != 0) {
-        std::cerr << "[Informed] curl exited with status " << status << std::endl;
+        std::cerr << "[Gargoyled] curl exited with status " << status << std::endl;
         return "";
     }
 
@@ -249,7 +249,7 @@ static std::string parse_response(const std::string &response_str)
         // Check for API errors
         if (response.contains("error")) {
             std::string err_msg = response["error"].value("message", "unknown error");
-            std::cerr << "[Informed] API error: " << err_msg << std::endl;
+            std::cerr << "[Gargoyled] API error: " << err_msg << std::endl;
             return "";
         }
 
@@ -266,7 +266,7 @@ static std::string parse_response(const std::string &response_str)
             }
         }
     } catch (const json::exception &e) {
-        std::cerr << "[Informed] JSON parse error: " << e.what() << std::endl;
+        std::cerr << "[Gargoyled] JSON parse error: " << e.what() << std::endl;
     }
 
     return "";
@@ -287,11 +287,11 @@ void init()
     if (key != nullptr && key[0] != '\0') {
         s_api_key = key;
         s_available = true;
-        std::cerr << "[Informed] LLM translation enabled (model: " << MODEL << ")" << std::endl;
+        std::cerr << "[Gargoyled] LLM translation enabled (model: " << MODEL << ")" << std::endl;
     } else {
         s_available = false;
-        std::cerr << "[Informed] No ANTHROPIC_API_KEY found; LLM translation disabled." << std::endl;
-        std::cerr << "[Informed] Set ANTHROPIC_API_KEY environment variable or store it in the macOS Keychain to enable natural language input." << std::endl;
+        std::cerr << "[Gargoyled] No ANTHROPIC_API_KEY found; LLM translation disabled." << std::endl;
+        std::cerr << "[Gargoyled] Set ANTHROPIC_API_KEY environment variable or store it in the macOS Keychain to enable natural language input." << std::endl;
     }
 }
 
@@ -361,7 +361,7 @@ std::string translate_input(const std::string &player_input,
     }
 
     // Log the translation for debugging (to stderr, not game output)
-    std::cerr << "[Informed] \"" << player_input << "\" -> \"" << translated << "\"" << std::endl;
+    std::cerr << "[Gargoyled] \"" << player_input << "\" -> \"" << translated << "\"" << std::endl;
 
     return translated;
 }

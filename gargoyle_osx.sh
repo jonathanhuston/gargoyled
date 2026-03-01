@@ -110,11 +110,11 @@ echo "MACOS_MIN_VER $MACOS_MIN_VER"
 NUMJOBS=$(sysctl -n hw.ncpu)
 
 GARGDIST=build/dist
-BUNDLE=Gargoyle.app/Contents
+BUNDLE=Gargoyled.app/Contents
 
 GARVERSION=$(<VERSION)
 
-rm -rf Gargoyle.app
+rm -rf Gargoyled.app
 mkdir -p "$BUNDLE/MacOS"
 mkdir -p "$BUNDLE/Frameworks"
 mkdir -p "$BUNDLE/Resources/Fonts"
@@ -132,7 +132,7 @@ make install
 cd -
 
 # Copy the main executable to the MacOS directory;
-cp "$GARGDIST/gargoyle" "$BUNDLE/MacOS/Gargoyle"
+cp "$GARGDIST/gargoyle" "$BUNDLE/MacOS/Gargoyled"
 
 # Copy terps to the PlugIns directory.
 find "${GARGDIST}" -type f -not -name '*.dylib' -not -name 'gargoyle' -print0 | xargs -0 -J @ cp @ "$BUNDLE/PlugIns"
@@ -193,8 +193,8 @@ do
 done
 
 # Ensure interpreters can find libgarglk
-find Gargoyle.app/Contents/PlugIns/ -type f -exec install_name_tool -add_rpath '@executable_path/../Frameworks' {} \;
-install_name_tool -add_rpath '@executable_path/../Frameworks' "$BUNDLE/MacOS/Gargoyle"
+find Gargoyled.app/Contents/PlugIns/ -type f -exec install_name_tool -add_rpath '@executable_path/../Frameworks' {} \;
+install_name_tool -add_rpath '@executable_path/../Frameworks' "$BUNDLE/MacOS/Gargoyled"
 
 echo "Copying additional support files..."
 /usr/bin/sed -E -e "s/INSERT_VERSION_HERE/$GARVERSION/" garglk/launcher.plist > $BUNDLE/Info.plist
@@ -208,13 +208,13 @@ cp fonts/Gargoyle*.ttf $BUNDLE/Resources/Fonts
 cp fonts/unifont*.otf $BUNDLE/Resources
 cp themes/*.json $BUNDLE/Resources/themes
 
-xattr -c Gargoyle.app
-codesign -s - -f --deep Gargoyle.app
+xattr -c Gargoyled.app
+codesign -s - -f --deep Gargoyled.app
 
 if [[ -z "${GARGOYLE_NO_DMG}" ]]
 then
     echo "Creating DMG..."
-    hdiutil create -fs "HFS+J" -ov -srcfolder Gargoyle.app/ "gargoyle-$GARVERSION-$TARGET_ARCH.dmg"
+    hdiutil create -fs "HFS+J" -ov -srcfolder Gargoyled.app/ "gargoyled-$GARVERSION-$TARGET_ARCH.dmg"
 fi
 
 echo "Done."

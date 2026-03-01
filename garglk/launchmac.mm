@@ -1,4 +1,5 @@
 // Copyright (C) 2010 by Ben Cressey.
+// Portions Copyright (C) 2026 by Jonathan Huston.
 //
 // This file is part of Gargoyle.
 //
@@ -35,7 +36,7 @@
 #import "sysmac.h"
 #include "keychainmac.h"
 
-static const char *AppName = "Gargoyle " GARGOYLE_VERSION;
+static const char *AppName = "Gargoyled " GARGOYLE_VERSION;
 
 // Qt's origin is the top-left, but Mac's is bottom left, so translate,
 // since the config format is determined by Qt.
@@ -548,7 +549,7 @@ static NSURL *get_save_dir(NSString *filename)
         return nil;
     }
 
-    dir = [dir URLByAppendingPathComponent: @"Gargoyle/gamedata"];
+    dir = [dir URLByAppendingPathComponent: @"Gargoyled/gamedata"];
     dir = [dir URLByAppendingPathComponent: filename];
     NSFileManager *fm = [NSFileManager defaultManager];
     [fm createDirectoryAtURL: dir withIntermediateDirectories: YES attributes: nil error: &error];
