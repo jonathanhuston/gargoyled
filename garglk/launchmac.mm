@@ -33,6 +33,7 @@
 #include <libproc.h>
 #include <unistd.h>
 #import "sysmac.h"
+#include "keychainmac.h"
 
 static const char *AppName = "Gargoyle " GARGOYLE_VERSION;
 
@@ -683,6 +684,17 @@ static void maybe_set_save_dir(NSSavePanel *panel, NSString *savedir)
 
     auto etc = [nsResources UTF8String];
     setenv("GARGLK_RESOURCES", etc, true);
+
+    // set up Anthropic API key from Keychain if not already in environment
+    if (std::getenv("ANTHROPIC_API_KEY") == nullptr) {
+        std::string api_key = garglk::keychain::get_api_key();
+        if (api_key.empty()) {
+            api_key = garglk::keychain::prompt_for_api_key();
+        }
+        if (!api_key.empty()) {
+            setenv("ANTHROPIC_API_KEY", api_key.c_str(), 0);
+        }
+    }
 
     // set preference defaults
     [[NSUserDefaults standardUserDefaults] registerDefaults:

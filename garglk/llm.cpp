@@ -291,7 +291,7 @@ void init()
     } else {
         s_available = false;
         std::cerr << "[Informed] No ANTHROPIC_API_KEY found; LLM translation disabled." << std::endl;
-        std::cerr << "[Informed] Set ANTHROPIC_API_KEY environment variable to enable natural language input." << std::endl;
+        std::cerr << "[Informed] Set ANTHROPIC_API_KEY environment variable or store it in the macOS Keychain to enable natural language input." << std::endl;
     }
 }
 

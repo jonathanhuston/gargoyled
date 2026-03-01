@@ -208,6 +208,7 @@ cp fonts/Gargoyle*.ttf $BUNDLE/Resources/Fonts
 cp fonts/unifont*.otf $BUNDLE/Resources
 cp themes/*.json $BUNDLE/Resources/themes
 
+xattr -c Gargoyle.app
 codesign -s - -f --deep Gargoyle.app
 
 if [[ -z "${GARGOYLE_NO_DMG}" ]]
