@@ -85,13 +85,17 @@ Two versions of libgarglk are built:
 ### Gargoyled LLM subsystem (`garglk/llm.h`, `garglk/llm.cpp`)
 
 Integration point: `wintext.cpp` at the line-input completion handler. When the player presses Enter:
-1. `llm::is_available()` checks if `ANTHROPIC_API_KEY` env var is set
-2. `llm::is_simple_command()` heuristically bypasses API for already-valid parser commands (single-word, common abbreviations, or ≤3 words with no natural language markers)
+1. `llm::is_available()` initializes the backend(s) on first call (see below)
+2. `llm::is_simple_command()` heuristically bypasses translation for already-valid parser commands (single-word, common abbreviations, or ≤3 words with no natural language markers)
 3. `llm::get_game_context()` extracts up to 2000 chars from the scrollback buffer
-4. `llm::translate_input()` calls Anthropic Messages API via `popen(curl ...)` using claude-haiku-4-5
+4. `llm::translate_input()` tries the Apple backend, then the Claude backend
 5. Translated command replaces the Glk input buffer contents
 
-The LLM module uses nlohmann/json (`json.hpp`) for request/response serialization. On any failure, it falls back to the original input unchanged.
+Backends (selected by `GARGOYLED_BACKEND` = `auto` (default) | `apple` | `claude` | `off`):
+- **Apple** — on-device Apple Intelligence (Foundation Models, macOS 26+, Apple Silicon). Implemented as a separate Swift helper, `garglk/gargoyled-translate.swift`, built by CMake (`WITH_APPLE_INTELLIGENCE`, default ON on Apple) and installed into `Gargoyled.app/Contents/PlugIns` next to the interpreters. `llm.cpp` spawns it per translation with `{"instructions","prompt"}` JSON on stdin; it prints the command on stdout. `--check` exits 0 if the model is available. Override the helper path with `GARGOYLED_TRANSLATOR`.
+- **Claude** — Anthropic Messages API via `popen(curl ...)` using claude-haiku-4-5; needs `ANTHROPIC_API_KEY`.
+
+In `auto`, Apple is preferred and Claude (if a key is set) is used as a runtime fallback. The launcher (`launchmac.mm`) skips the API-key Keychain prompt when Apple Intelligence is available. The LLM module uses nlohmann/json (`json.hpp`). On any failure, it falls back to the original input unchanged.
 
 ### Interpreters (`terps/`)
 
@@ -110,4 +114,4 @@ There are no unit tests. CI validates builds across platform/feature matrix comb
 
 ## LLM Configuration
 
-Set `ANTHROPIC_API_KEY` environment variable to enable natural language translation. Without it, Gargoyled behaves identically to standard Gargoyle. Debug output goes to stderr with `[Gargoyled]` prefix.
+On an Apple Intelligence–capable Mac, translation works with no configuration. Otherwise set `ANTHROPIC_API_KEY` (env or macOS Keychain). With neither, or with `GARGOYLED_BACKEND=off`, Gargoyled behaves identically to standard Gargoyle. Debug output goes to stderr with `[Gargoyled]` prefix.

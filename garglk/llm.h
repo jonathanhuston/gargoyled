@@ -17,11 +17,13 @@
 
 namespace garglk { namespace llm {
 
-// Initialize the LLM subsystem. Reads ANTHROPIC_API_KEY from environment.
+// Initialize the LLM subsystem. Picks a backend per GARGOYLED_BACKEND
+// (auto|apple|claude|off): on-device Apple Intelligence via the
+// gargoyled-translate helper, and/or Claude via ANTHROPIC_API_KEY.
 // Safe to call multiple times; only the first call has effect.
 void init();
 
-// Returns true if an API key is configured and translation is available.
+// Returns true if at least one translation backend is available.
 bool is_available();
 
 // Translate a natural-language player input into parser-friendly IF command(s).

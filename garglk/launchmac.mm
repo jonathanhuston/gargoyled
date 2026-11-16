@@ -40,6 +40,41 @@ static const char *AppName = "Gargoyled " GARGOYLE_VERSION;
 
 // Qt's origin is the top-left, but Mac's is bottom left, so translate,
 // since the config format is determined by Qt.
+// True if the interpreter's LLM layer (llm.cpp) will pick on-device Apple
+// Intelligence: backend not forced to claude/off, and the bundled
+// gargoyled-translate helper reports the model as available.
+static bool apple_intelligence_will_translate()
+{
+    const char *backend = std::getenv("GARGOYLED_BACKEND");
+    if (backend != nullptr && backend[0] != '\0' &&
+        strcasecmp(backend, "auto") != 0 && strcasecmp(backend, "apple") != 0) {
+        return false;
+    }
+
+    NSString *helper;
+    const char *override_path = std::getenv("GARGOYLED_TRANSLATOR");
+    if (override_path != nullptr && override_path[0] != '\0') {
+        helper = [NSString stringWithUTF8String: override_path];
+    } else {
+        helper = [[[NSBundle mainBundle] builtInPlugInsPath] stringByAppendingPathComponent: @"gargoyled-translate"];
+    }
+    if (![[NSFileManager defaultManager] isExecutableFileAtPath: helper]) {
+        return false;
+    }
+
+    NSTask *task = [[[NSTask alloc] init] autorelease];
+    [task setLaunchPath: helper];
+    [task setArguments: @[@"--check"]];
+    [task setStandardError: [NSFileHandle fileHandleWithNullDevice]];
+    @try {
+        [task launch];
+        [task waitUntilExit];
+    } @catch (NSException *) {
+        return false;
+    }
+    return [task terminationStatus] == 0;
+}
+
 static int coord_flip(NSWindow *window)
 {
     auto screen_height = [NSScreen mainScreen].frame.size.height;
@@ -686,10 +721,12 @@ static void maybe_set_save_dir(NSSavePanel *panel, NSString *savedir)
     auto etc = [nsResources UTF8String];
     setenv("GARGLK_RESOURCES", etc, true);
 
-    // set up Anthropic API key from Keychain if not already in environment
+    // set up Anthropic API key from Keychain if not already in environment.
+    // If on-device Apple Intelligence will handle translation, still load a
+    // stored key (as a fallback) but don't nag the user for one.
     if (std::getenv("ANTHROPIC_API_KEY") == nullptr) {
         std::string api_key = garglk::keychain::get_api_key();
-        if (api_key.empty()) {
+        if (api_key.empty() && !apple_intelligence_will_translate()) {
             api_key = garglk::keychain::prompt_for_api_key();
         }
         if (!api_key.empty()) {

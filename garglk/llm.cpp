@@ -9,12 +9,22 @@
 
 #include <array>
 #include <cctype>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+extern char **environ;
+#endif
 
 #include "glk.h"
 #include "garglk.h"
@@ -29,9 +39,19 @@ namespace garglk { namespace llm {
 // Internal state
 // ---------------------------------------------------------------------------
 
+// Translation backends:
+//   Apple  — on-device Apple Intelligence via the gargoyled-translate helper
+//   Claude — Anthropic Messages API via curl
+// Selected by GARGOYLED_BACKEND (auto|apple|claude|off; default auto).
+// "auto" prefers Apple when the on-device model is available, and keeps
+// Claude (if an API key is set) as a runtime fallback.
+
 static bool s_initialized = false;
 static bool s_available = false;
+static bool s_use_apple = false;
+static bool s_use_claude = false;
 static std::string s_api_key;
+static std::string s_apple_helper;
 
 static const char *MODEL = "claude-haiku-4-5-20251001";
 static const int MAX_TOKENS = 150;
@@ -69,8 +89,11 @@ ASK WIZARD ABOUT CRYSTAL
 Input: "put the red book on the shelf"
 PUT RED BOOK ON SHELF
 
-Input: "what's in my bag?"
-SEARCH BAG
+Input: "what am I carrying?"
+INVENTORY
+
+Input: "what's in the bag?"
+LOOK IN BAG
 
 Input: "n"
 N)";
@@ -273,6 +296,146 @@ static std::string parse_response(const std::string &response_str)
 }
 
 // ---------------------------------------------------------------------------
+// Apple Intelligence backend (gargoyled-translate helper)
+// ---------------------------------------------------------------------------
+
+#ifdef __APPLE__
+
+static std::string own_executable_dir()
+{
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::vector<char> buf(size + 1, '\0');
+    if (_NSGetExecutablePath(buf.data(), &size) != 0) {
+        return "";
+    }
+    std::string path(buf.data());
+    auto slash = path.find_last_of('/');
+    return slash == std::string::npos ? "" : path.substr(0, slash);
+}
+
+// Locate the helper: $GARGOYLED_TRANSLATOR, else next to this executable
+// (interpreters and the helper both live in Gargoyled.app/Contents/PlugIns).
+static std::string find_apple_helper()
+{
+    const char *env = std::getenv("GARGOYLED_TRANSLATOR");
+    if (env != nullptr && env[0] != '\0') {
+        return access(env, X_OK) == 0 ? env : "";
+    }
+    std::string dir = own_executable_dir();
+    if (dir.empty()) {
+        return "";
+    }
+    std::string path = dir + "/gargoyled-translate";
+    return access(path.c_str(), X_OK) == 0 ? path : "";
+}
+
+// Run the helper with the given args, feeding stdin_data and capturing stdout.
+// Returns the exit status (or -1 if it could not be run).
+static int run_helper(const std::vector<std::string> &args,
+                      const std::string &stdin_data,
+                      std::string &stdout_data)
+{
+    int in_pipe[2], out_pipe[2];
+    if (pipe(in_pipe) != 0) {
+        return -1;
+    }
+    if (pipe(out_pipe) != 0) {
+        close(in_pipe[0]);
+        close(in_pipe[1]);
+        return -1;
+    }
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_adddup2(&actions, in_pipe[0], STDIN_FILENO);
+    posix_spawn_file_actions_adddup2(&actions, out_pipe[1], STDOUT_FILENO);
+    posix_spawn_file_actions_addclose(&actions, in_pipe[1]);
+    posix_spawn_file_actions_addclose(&actions, out_pipe[0]);
+
+    std::vector<char *> argv;
+    argv.push_back(const_cast<char *>(s_apple_helper.c_str()));
+    for (const auto &arg : args) {
+        argv.push_back(const_cast<char *>(arg.c_str()));
+    }
+    argv.push_back(nullptr);
+
+    pid_t pid;
+    int rc = posix_spawn(&pid, s_apple_helper.c_str(), &actions, nullptr, argv.data(), environ);
+    posix_spawn_file_actions_destroy(&actions);
+    close(in_pipe[0]);
+    close(out_pipe[1]);
+
+    if (rc != 0) {
+        close(in_pipe[1]);
+        close(out_pipe[0]);
+        std::cerr << "[Gargoyled] Failed to run " << s_apple_helper << ": " << std::strerror(rc) << std::endl;
+        return -1;
+    }
+
+    // The helper reads all of stdin before writing anything, so writing
+    // everything first and then reading cannot deadlock.
+    const char *p = stdin_data.data();
+    size_t remaining = stdin_data.size();
+    while (remaining > 0) {
+        ssize_t n = write(in_pipe[1], p, remaining);
+        if (n <= 0) {
+            break;
+        }
+        p += n;
+        remaining -= static_cast<size_t>(n);
+    }
+    close(in_pipe[1]);
+
+    std::array<char, 4096> buffer;
+    ssize_t n;
+    while ((n = read(out_pipe[0], buffer.data(), buffer.size())) > 0) {
+        stdout_data.append(buffer.data(), static_cast<size_t>(n));
+    }
+    close(out_pipe[0]);
+
+    int status;
+    while (waitpid(pid, &status, 0) == -1) {
+        if (errno != EINTR) {
+            return -1;
+        }
+    }
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+
+static bool apple_model_available()
+{
+    std::string ignored;
+    return run_helper({"--check"}, "", ignored) == 0;
+}
+
+static std::string call_apple_model(const std::string &user_message)
+{
+    json request;
+    request["instructions"] = SYSTEM_PROMPT;
+    request["prompt"] = user_message;
+
+    std::string output;
+    int status = run_helper({}, request.dump(), output);
+    if (status != 0) {
+        std::cerr << "[Gargoyled] Apple Intelligence translation failed (status " << status << ")" << std::endl;
+        return "";
+    }
+
+    output.erase(0, output.find_first_not_of(" \t\r\n"));
+    output.erase(output.find_last_not_of(" \t\r\n") + 1);
+    return output;
+}
+
+#else
+
+static std::string find_apple_helper() { return ""; }
+static bool apple_model_available() { return false; }
+static std::string call_apple_model(const std::string &) { return ""; }
+
+#endif
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -283,15 +446,44 @@ void init()
     }
     s_initialized = true;
 
-    const char *key = std::getenv("ANTHROPIC_API_KEY");
-    if (key != nullptr && key[0] != '\0') {
-        s_api_key = key;
-        s_available = true;
-        std::cerr << "[Gargoyled] LLM translation enabled (model: " << MODEL << ")" << std::endl;
-    } else {
-        s_available = false;
-        std::cerr << "[Gargoyled] No ANTHROPIC_API_KEY found; LLM translation disabled." << std::endl;
-        std::cerr << "[Gargoyled] Set ANTHROPIC_API_KEY environment variable or store it in the macOS Keychain to enable natural language input." << std::endl;
+    std::string backend = "auto";
+    if (const char *env = std::getenv("GARGOYLED_BACKEND"); env != nullptr && env[0] != '\0') {
+        backend = env;
+        for (char &c : backend) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+    }
+
+    if (backend == "off" || backend == "none") {
+        std::cerr << "[Gargoyled] GARGOYLED_BACKEND=off; LLM translation disabled." << std::endl;
+        return;
+    }
+
+    if (backend == "auto" || backend == "apple") {
+        s_apple_helper = find_apple_helper();
+        if (!s_apple_helper.empty() && apple_model_available()) {
+            s_use_apple = true;
+            std::cerr << "[Gargoyled] LLM translation enabled (on-device Apple Intelligence)" << std::endl;
+        } else if (backend == "apple") {
+            std::cerr << "[Gargoyled] GARGOYLED_BACKEND=apple but Apple Intelligence is unavailable; LLM translation disabled." << std::endl;
+        }
+    }
+
+    if (backend == "auto" || backend == "claude") {
+        const char *key = std::getenv("ANTHROPIC_API_KEY");
+        if (key != nullptr && key[0] != '\0') {
+            s_api_key = key;
+            s_use_claude = true;
+            std::cerr << "[Gargoyled] LLM translation " << (s_use_apple ? "fallback" : "enabled")
+                      << " (model: " << MODEL << ")" << std::endl;
+        }
+    }
+
+    s_available = s_use_apple || s_use_claude;
+
+    if (!s_available && backend != "apple") {
+        std::cerr << "[Gargoyled] No translation backend available; LLM translation disabled." << std::endl;
+        std::cerr << "[Gargoyled] Enable Apple Intelligence, or set ANTHROPIC_API_KEY (environment or macOS Keychain), to enable natural language input." << std::endl;
     }
 }
 
@@ -351,12 +543,16 @@ std::string translate_input(const std::string &player_input,
 
     user_msg << "Player input: " << player_input;
 
-    // Call the API
-    std::string response_str = call_anthropic_api(user_msg.str());
-    std::string translated = parse_response(response_str);
+    std::string translated;
+    if (s_use_apple) {
+        translated = call_apple_model(user_msg.str());
+    }
+    if (translated.empty() && s_use_claude) {
+        translated = parse_response(call_anthropic_api(user_msg.str()));
+    }
 
     if (translated.empty()) {
-        // API failed; fall back to original input
+        // All backends failed; fall back to original input
         return player_input;
     }
 

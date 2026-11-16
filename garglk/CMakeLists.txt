@@ -385,6 +385,48 @@ if(CXX_VERSION EQUAL 17)
     target_link_libraries(garglk-gpl2 PRIVATE xbrz-null)
 endif()
 
+# Gargoyled: gargoyled-translate, a small Swift helper that runs input
+# translation on the on-device Apple Intelligence model (Foundation Models
+# framework). It's a separate executable so libgarglk stays plain C++ and keeps
+# its old deployment target; llm.cpp spawns it per translation and falls back
+# to Claude if it's missing or the model is unavailable at runtime.
+if(APPLE)
+    option(WITH_APPLE_INTELLIGENCE "Build the on-device Apple Intelligence translation helper" ON)
+endif()
+
+if(APPLE AND WITH_APPLE_INTELLIGENCE)
+    if(CMAKE_OSX_ARCHITECTURES)
+        set(GARGOYLED_TRANSLATE_ARCH "${CMAKE_OSX_ARCHITECTURES}")
+    else()
+        set(GARGOYLED_TRANSLATE_ARCH "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+    endif()
+
+    execute_process(COMMAND xcrun --show-sdk-path
+        OUTPUT_VARIABLE GARGOYLED_SDK_PATH OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+
+    if(NOT GARGOYLED_TRANSLATE_ARCH STREQUAL "arm64")
+        message(STATUS "Apple Intelligence helper: skipped (requires arm64, building for ${GARGOYLED_TRANSLATE_ARCH})")
+    elseif(NOT EXISTS "${GARGOYLED_SDK_PATH}/System/Library/Frameworks/FoundationModels.framework")
+        message(STATUS "Apple Intelligence helper: skipped (SDK has no FoundationModels.framework; need Xcode 26+)")
+    else()
+        message(STATUS "Apple Intelligence helper: enabled")
+        set(GARGOYLED_TRANSLATE "${CMAKE_CURRENT_BINARY_DIR}/gargoyled-translate")
+        add_custom_command(
+            OUTPUT "${GARGOYLED_TRANSLATE}"
+            COMMAND xcrun swiftc -O -target arm64-apple-macos26.0
+                    "${CMAKE_CURRENT_SOURCE_DIR}/gargoyled-translate.swift"
+                    -o "${GARGOYLED_TRANSLATE}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gargoyled-translate.swift"
+            COMMENT "Building gargoyled-translate (Apple Intelligence helper)"
+            VERBATIM)
+        add_custom_target(gargoyled-translate ALL DEPENDS "${GARGOYLED_TRANSLATE}")
+
+        if(DIST_INSTALL)
+            install(PROGRAMS "${GARGOYLED_TRANSLATE}" DESTINATION "${PROJECT_SOURCE_DIR}/build/dist")
+        endif()
+    endif()
+endif()
+
 if(DIST_INSTALL)
     if(WITH_LAUNCHER)
         install(TARGETS gargoyle DESTINATION "${PROJECT_SOURCE_DIR}/build/dist")

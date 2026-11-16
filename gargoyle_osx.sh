@@ -148,6 +148,15 @@ copy_new_dylibs() {
   find "${BUNDLE}" -type f -print0 | while IFS= read -r -d "" file
   do
     otool -L "${file}" | grep -F "${HOMEBREW_OR_MACPORTS_LOCATION}" | sed -E -e 's/^[[:space:]]+(.*)[[:space:]]+\([^)]*\)$/\1/' >> "${ALL_DYLIB_PATHS}"
+    # Some Homebrew libraries reference their siblings via @rpath (e.g.
+    # libbrotlidec -> @rpath/libbrotlicommon). Resolve those against the
+    # package manager's lib dir so they get bundled too.
+    otool -L "${file}" | sed -n -E -e 's/^[[:space:]]+@rpath\/([^ ]+\.dylib) \(.*$/\1/p' | while IFS= read -r name
+    do
+      if [[ -f "${HOMEBREW_OR_MACPORTS_LOCATION}/lib/${name}" ]]; then
+        echo "${HOMEBREW_OR_MACPORTS_LOCATION}/lib/${name}" >> "${ALL_DYLIB_PATHS}"
+      fi
+    done
   done
   UNIQUE_DYLIB_PATHS="$(mktemp -t gargoylebuild)"
   sort "${ALL_DYLIB_PATHS}" | uniq > "${UNIQUE_DYLIB_PATHS}"
@@ -171,6 +180,16 @@ copy_new_dylibs() {
   return 1
 }
 until copy_new_dylibs ; do true; done
+
+# Homebrew's SDL2 is now sdl2-compat, a shim that dlopen()s SDL3 at runtime
+# from @loader_path/libSDL3.dylib. otool can't see that dependency, so bundle
+# SDL3 explicitly next to the SDL2 shim.
+SDL3_DYLIB="${HOMEBREW_OR_MACPORTS_LOCATION}/lib/libSDL3.dylib"
+if [[ -f "$BUNDLE/Frameworks/libSDL2-2.0.0.dylib" && -f "${SDL3_DYLIB}" ]] && strings -a "$BUNDLE/Frameworks/libSDL2-2.0.0.dylib" | grep -q "sdl2-compat"; then
+  echo "Bundling SDL3 for sdl2-compat..."
+  cp -L "${SDL3_DYLIB}" "$BUNDLE/Frameworks/libSDL3.dylib"
+  chmod 644 "$BUNDLE/Frameworks/libSDL3.dylib"  # SDL3 only links system frameworks
+fi
 
 echo "Changing dylib IDs and references..."
 
